@@ -4,13 +4,14 @@ SecureDelete is a lightweight Windows utility for securely deleting files and fo
 
 ## Features
 - Multi-pass overwriting (configurable; default is 3 passes).
+- Console progress bar shows wipe completion as files are processed.
 - Recursive wiping of directories when requested.
 - Removes read-only attributes automatically and optionally continues after non-critical errors with `--force`.
 - Designed for seamless File Explorer integration via a simple registry entry.
 
 ## Build instructions (Visual Studio)
 1. Open `SecureDelete.sln` in Visual Studio 2026 (or Visual Studio 2022/2025).
-2. Ensure the project targets the .NET 8.0 SDK (you can retarget in project properties if needed).
+2. Ensure the project targets the .NET 8.0 SDK or newer (you can retarget in project properties if needed).
 3. Build the solution in **Release** mode to produce `SecureDelete.exe` under `src/SecureDelete.App/bin/Release/net8.0/`.
 
 ## Usage
