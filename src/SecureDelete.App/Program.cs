@@ -119,6 +119,7 @@ internal sealed class ProgressDialog : Form, ISecureDeleteProgress
     private readonly ProgressBar _progressBar;
     private readonly Label _statusLabel;
     private readonly Label _targetLabel;
+    private bool _canClose;
     private int _totalItems = 1;
 
     public ProgressDialog()
@@ -161,6 +162,7 @@ internal sealed class ProgressDialog : Form, ISecureDeleteProgress
         };
 
         Controls.AddRange(new Control[] { _statusLabel, _progressBar, _targetLabel });
+        _canClose = false;
     }
 
     public void AttachTask(Task<SecureWipeResult> wipeTask)
@@ -174,6 +176,8 @@ internal sealed class ProgressDialog : Form, ISecureDeleteProgress
 
             UpdateUi(() =>
             {
+                _canClose = true;
+                ControlBox = true;
                 _statusLabel.Text = message;
                 _targetLabel.Text = string.Empty;
                 _progressBar.Value = Math.Min(_progressBar.Maximum, _progressBar.Value);
@@ -188,6 +192,7 @@ internal sealed class ProgressDialog : Form, ISecureDeleteProgress
         _totalItems = Math.Max(totalItems, 1);
         UpdateUi(() =>
         {
+            ControlBox = false;
             _progressBar.Maximum = _totalItems;
             _progressBar.Value = 0;
             _statusLabel.Text = $"Starting... (0/{_totalItems})";
@@ -216,14 +221,52 @@ internal sealed class ProgressDialog : Form, ISecureDeleteProgress
 
     private void UpdateUi(Action update)
     {
+        if (IsDisposed || Disposing)
+        {
+            return;
+        }
+
+        if (!IsHandleCreated)
+        {
+            try
+            {
+                _ = Handle;
+            }
+            catch (InvalidOperationException)
+            {
+                return;
+            }
+        }
+
         if (InvokeRequired)
         {
-            BeginInvoke(update);
+            try
+            {
+                BeginInvoke(update);
+            }
+            catch (InvalidOperationException)
+            {
+                // The form was closed; ignore further updates.
+            }
         }
         else
         {
-            update();
+            if (!IsDisposed && !Disposing)
+            {
+                update();
+            }
         }
+    }
+
+    protected override void OnFormClosing(FormClosingEventArgs e)
+    {
+        if (!_canClose && e.CloseReason == CloseReason.UserClosing)
+        {
+            e.Cancel = true;
+            return;
+        }
+
+        base.OnFormClosing(e);
     }
 }
 
