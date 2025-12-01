@@ -42,6 +42,7 @@ Delete the following registry keys:
 - `HKEY_CLASSES_ROOT\\Directory\\shell\\SecureDelete`
 
 ## Notes on secure deletion
-- SSDs and some file systems may silently remap sectors; no software-only tool can guarantee data destruction in those cases. Use full-disk encryption for additional protection.
+- HDDs: multiple overwrite passes combined with a rename-and-delete workflow provide strong protection for traditional spinning disks.
+- SSDs: due to wear leveling, TRIM, and controller remapping, overwriting cannot guarantee destruction of every copy of the data. Pair this tool with full-disk encryption and, when needed, the drive's built-in **secure erase** or **sanitize** feature.
 - Closing applications that may hold file locks will improve wipe reliability.
 - Increase the number of passes for highly sensitive data, but note that more passes take longer.
