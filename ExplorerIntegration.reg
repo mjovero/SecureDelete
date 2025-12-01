@@ -1,0 +1,16 @@
+Windows Registry Editor Version 5.00
+
+; Update the path below if SecureDelete.exe is installed elsewhere.
+[HKEY_CLASSES_ROOT\*\shell\SecureDelete]
+@="Secure Delete"
+"Icon"="\"C:\\Program Files\\SecureDelete\\SecureDelete.exe\""
+
+[HKEY_CLASSES_ROOT\*\shell\SecureDelete\command]
+@="\"C:\\Program Files\\SecureDelete\\SecureDelete.exe\" \"%1\""
+
+[HKEY_CLASSES_ROOT\Directory\shell\SecureDelete]
+@="Secure Delete"
+"Icon"="\"C:\\Program Files\\SecureDelete\\SecureDelete.exe\""
+
+[HKEY_CLASSES_ROOT\Directory\shell\SecureDelete\command]
+@="\"C:\\Program Files\\SecureDelete\\SecureDelete.exe\" \"%1\""
