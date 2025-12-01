@@ -6,11 +6,11 @@ Windows Registry Editor Version 5.00
 "Icon"="\"C:\\Program Files\\SecureDelete\\SecureDelete.exe\""
 
 [HKEY_CLASSES_ROOT\*\shell\SecureDelete\command]
-@="\"C:\\Program Files\\SecureDelete\\SecureDelete.exe\" \"%1\""
+@="\"C:\\Program Files\\SecureDelete\\SecureDelete.exe\" --window-ui \"%1\""
 
 [HKEY_CLASSES_ROOT\Directory\shell\SecureDelete]
 @="Secure Delete"
 "Icon"="\"C:\\Program Files\\SecureDelete\\SecureDelete.exe\""
 
 [HKEY_CLASSES_ROOT\Directory\shell\SecureDelete\command]
-@="\"C:\\Program Files\\SecureDelete\\SecureDelete.exe\" \"%1\""
+@="\"C:\\Program Files\\SecureDelete\\SecureDelete.exe\" --window-ui \"%1\""

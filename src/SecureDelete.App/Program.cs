@@ -1,9 +1,12 @@
 using System.Security.Cryptography;
 using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
+using System.Windows.Forms;
 
 namespace SecureDelete;
 
-internal sealed record CliOptions(int Passes, bool Recursive, bool Force, IReadOnlyList<string> Targets)
+internal sealed record CliOptions(int Passes, bool Recursive, bool Force, bool WindowUi, IReadOnlyList<string> Targets)
 {
     public static CliOptions? Parse(string[] args)
     {
@@ -11,6 +14,7 @@ internal sealed record CliOptions(int Passes, bool Recursive, bool Force, IReadO
         var passes = 3;
         var recursive = false;
         var force = false;
+        var windowUi = false;
 
         for (var i = 0; i < args.Length; i++)
         {
@@ -32,6 +36,9 @@ internal sealed record CliOptions(int Passes, bool Recursive, bool Force, IReadO
                 case "--force" or "-f":
                     force = true;
                     break;
+                case "--window-ui":
+                    windowUi = true;
+                    break;
                 case "--help" or "-h" or "-?":
                     return null;
                 default:
@@ -40,7 +47,7 @@ internal sealed record CliOptions(int Passes, bool Recursive, bool Force, IReadO
             }
         }
 
-        return targets.Count == 0 ? null : new CliOptions(passes, recursive, force, targets);
+        return targets.Count == 0 ? null : new CliOptions(passes, recursive, force, windowUi, targets);
     }
 }
 
@@ -107,10 +114,167 @@ internal sealed class ConsoleProgressBar : ISecureDeleteProgress
     }
 }
 
+internal sealed class ProgressDialog : Form, ISecureDeleteProgress
+{
+    private readonly ProgressBar _progressBar;
+    private readonly Label _statusLabel;
+    private readonly Label _targetLabel;
+    private bool _canClose;
+    private int _totalItems = 1;
+
+    public ProgressDialog()
+    {
+        Text = "SecureDelete";
+        Width = 420;
+        Height = 180;
+        FormBorderStyle = FormBorderStyle.FixedDialog;
+        MaximizeBox = false;
+        MinimizeBox = false;
+        StartPosition = FormStartPosition.CenterScreen;
+
+        _statusLabel = new Label
+        {
+            Text = "Preparing secure deletion...",
+            AutoSize = true,
+            Left = 15,
+            Top = 20,
+            Width = 360
+        };
+
+        _progressBar = new ProgressBar
+        {
+            Left = 15,
+            Top = 50,
+            Width = 370,
+            Height = 24,
+            Minimum = 0,
+            Maximum = 1,
+            Style = ProgressBarStyle.Continuous
+        };
+
+        _targetLabel = new Label
+        {
+            Text = string.Empty,
+            AutoSize = true,
+            Left = 15,
+            Top = 85,
+            Width = 360
+        };
+
+        Controls.AddRange(new Control[] { _statusLabel, _progressBar, _targetLabel });
+        _canClose = false;
+    }
+
+    public void AttachTask(Task<SecureWipeResult> wipeTask)
+    {
+        wipeTask.ContinueWith(task =>
+        {
+            var result = task.Result;
+            var message = result.Success
+                ? "Secure deletion complete."
+                : $"Completed with {result.Failed.Count} error(s).";
+
+            UpdateUi(() =>
+            {
+                _canClose = true;
+                ControlBox = true;
+                _statusLabel.Text = message;
+                _targetLabel.Text = string.Empty;
+                _progressBar.Value = Math.Min(_progressBar.Maximum, _progressBar.Value);
+                MessageBox.Show(this, message, "SecureDelete", result.Success ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
+                Close();
+            });
+        }, TaskScheduler.FromCurrentSynchronizationContext());
+    }
+
+    public void Initialize(int totalItems)
+    {
+        _totalItems = Math.Max(totalItems, 1);
+        UpdateUi(() =>
+        {
+            ControlBox = false;
+            _progressBar.Maximum = _totalItems;
+            _progressBar.Value = 0;
+            _statusLabel.Text = $"Starting... (0/{_totalItems})";
+        });
+    }
+
+    public void Report(ProgressUpdate update)
+    {
+        UpdateUi(() =>
+        {
+            _progressBar.Value = Math.Clamp(update.Completed, _progressBar.Minimum, _progressBar.Maximum);
+            _statusLabel.Text = $"Deleting securely ({update.Completed}/{_totalItems})";
+            _targetLabel.Text = string.IsNullOrWhiteSpace(update.CurrentTarget)
+                ? string.Empty
+                : $"Current: {Path.GetFileName(update.CurrentTarget)}";
+        });
+    }
+
+    public void Complete()
+    {
+        UpdateUi(() =>
+        {
+            _statusLabel.Text = "Finalizing secure deletion...";
+        });
+    }
+
+    private void UpdateUi(Action update)
+    {
+        if (IsDisposed || Disposing)
+        {
+            return;
+        }
+
+        if (!IsHandleCreated)
+        {
+            try
+            {
+                _ = Handle;
+            }
+            catch (InvalidOperationException)
+            {
+                return;
+            }
+        }
+
+        if (InvokeRequired)
+        {
+            try
+            {
+                BeginInvoke(update);
+            }
+            catch (InvalidOperationException)
+            {
+                // The form was closed; ignore further updates.
+            }
+        }
+        else
+        {
+            if (!IsDisposed && !Disposing)
+            {
+                update();
+            }
+        }
+    }
+
+    protected override void OnFormClosing(FormClosingEventArgs e)
+    {
+        if (!_canClose && e.CloseReason == CloseReason.UserClosing)
+        {
+            e.Cancel = true;
+            return;
+        }
+
+        base.OnFormClosing(e);
+    }
+}
+
 internal static class Program
 {
     private const int DefaultBufferSize = 1024 * 64;
 
+    [STAThread]
     public static int Main(string[] args)
     {
         var options = CliOptions.Parse(args);
@@ -121,6 +285,13 @@ internal static class Program
         }
 
         var deleter = new SecureFileDeleter(options.Passes, options.Recursive, options.Force);
+        return options.WindowUi
+            ? RunWithWindowUi(options, deleter)
+            : RunWithConsoleUi(options, deleter);
+    }
+
+    private static int RunWithConsoleUi(CliOptions options, SecureFileDeleter deleter)
+    {
         var progress = new ConsoleProgressBar();
         var result = deleter.WipeTargets(options.Targets, progress);
 
@@ -137,6 +308,22 @@ internal static class Program
         return result.Success ? 0 : 1;
     }
 
+    private static int RunWithWindowUi(CliOptions options, SecureFileDeleter deleter)
+    {
+        Application.EnableVisualStyles();
+        Application.SetCompatibleTextRenderingDefault(false);
+        SynchronizationContext.SetSynchronizationContext(new WindowsFormsSynchronizationContext());
+
+        using var progressDialog = new ProgressDialog();
+        var wipeTask = Task.Run(() => deleter.WipeTargets(options.Targets, progressDialog));
+
+        progressDialog.AttachTask(wipeTask);
+        Application.Run(progressDialog);
+
+        var result = wipeTask.GetAwaiter().GetResult();
+        return result.Success ? 0 : 1;
+    }
+
     private static void PrintUsage()
     {
         var builder = new StringBuilder();
@@ -149,10 +336,8 @@ internal static class Program
         builder.AppendLine("  -p, --passes <number>    Number of overwrite passes (default: 3)");
         builder.AppendLine("  -r, --recursive          Recursively wipe directories");
         builder.AppendLine("  -f, --force              Ignore read-only attributes and continue on errors");
+        builder.AppendLine("      --window-ui          Show a windowed progress indicator (used by File Explorer context menu)");
         builder.AppendLine("  -h, --help               Show this help text");
-        builder.AppendLine();
-        builder.AppendLine("Note: On HDDs, multi-pass overwrites are effective. On SSDs, wear leveling/TRIM may leave");
-        builder.AppendLine("residual data; combine with full-disk encryption and drive secure-erase utilities.");
         builder.AppendLine();
         builder.AppendLine("Note: On HDDs, multi-pass overwrites are effective. On SSDs, wear leveling/TRIM may leave");
         builder.AppendLine("residual data; combine with full-disk encryption and drive secure-erase utilities.");
@@ -160,6 +345,7 @@ internal static class Program
         builder.AppendLine("Examples:");
         builder.AppendLine("  SecureDelete.exe --passes 5 --recursive C:\\Sensitive\\Archive");
         builder.AppendLine("  SecureDelete.exe -p 2 C:\\Temp\\file.txt D:\\logs\\old.log");
+        builder.AppendLine("  SecureDelete.exe --window-ui \"%1\"  (File Explorer context menu)");
 
         Console.WriteLine(builder.ToString());
     }
