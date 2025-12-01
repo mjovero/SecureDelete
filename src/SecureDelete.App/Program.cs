@@ -154,6 +154,9 @@ internal static class Program
         builder.AppendLine("Note: On HDDs, multi-pass overwrites are effective. On SSDs, wear leveling/TRIM may leave");
         builder.AppendLine("residual data; combine with full-disk encryption and drive secure-erase utilities.");
         builder.AppendLine();
+        builder.AppendLine("Note: On HDDs, multi-pass overwrites are effective. On SSDs, wear leveling/TRIM may leave");
+        builder.AppendLine("residual data; combine with full-disk encryption and drive secure-erase utilities.");
+        builder.AppendLine();
         builder.AppendLine("Examples:");
         builder.AppendLine("  SecureDelete.exe --passes 5 --recursive C:\\Sensitive\\Archive");
         builder.AppendLine("  SecureDelete.exe -p 2 C:\\Temp\\file.txt D:\\logs\\old.log");
